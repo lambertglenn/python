@@ -9,16 +9,15 @@ SPLUNK_HOST = os.getenv("SPLUNK_HOST", "https://localhost:8089")
 USERNAME = os.getenv("SPLUNK_USERNAME")
 PASSWORD = os.getenv("SPLUNK_PASSWORD")
 ALERT_LIST_FILE = os.getenv("SPLUNK_ALERT_LIST", "alerts.txt")
-APP_NAME = os.getenv("SPLUNK_APP_NAME", "search")  # Default app for alerts
 
-def disable_alert(alert_name, session):
-    url = f"{SPLUNK_HOST}/servicesNS/{USERNAME}/{APP_NAME}/saved/searches/{alert_name}"
+def disable_alert(alert_name, app_name, session):
+    url = f"{SPLUNK_HOST}/servicesNS/{USERNAME}/{app_name}/saved/searches/{alert_name}"
     payload = {"disabled": "1"}
     response = session.post(url, data=payload)
     if response.status_code == 200:
-        print(f"✅ Disabled alert: {alert_name}")
+        print(f"✅ Disabled alert: {alert_name} in app: {app_name}")
     else:
-        print(f"❌ Failed to disable {alert_name}: {response.status_code} - {response.text}")
+        print(f"❌ Failed for {alert_name} in {app_name}: {response.status_code} - {response.text}")
 
 def main():
     if not USERNAME or not PASSWORD:
@@ -32,10 +31,13 @@ def main():
     session.verify = False
 
     with open(ALERT_LIST_FILE, "r") as f:
-        alerts = [line.strip() for line in f if line.strip()]
-
-    for alert in alerts:
-        disable_alert(alert, session)
+        for line in f:
+            parts = line.strip().split(",")
+            if len(parts) != 2:
+                print(f"⚠️ Skipping malformed line: {line.strip()}")
+                continue
+            alert_name, app_name = parts
+            disable_alert(alert_name.strip(), app_name.strip(), session)
 
 if __name__ == "__main__":
     main()
