@@ -1,3 +1,1 @@
-another axi alert,microservice
-another old axi alert,qasearch
-axi alert,PRDPYR_search
+WellPoint AXI Alert,PRDPYR_availityops

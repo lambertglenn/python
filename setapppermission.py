@@ -5,7 +5,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Load credentials from environment variables
-SPLUNK_HOST = os.getenv("SPLUNK_HOST", "https://localhost:32771")
+SPLUNK_HOST = os.getenv("SPLUNK_HOST", "https://splunk.availity.net:8089")
 USERNAME = os.getenv("SPLUNK_USERNAME")
 PASSWORD = os.getenv("SPLUNK_PASSWORD")
 APP_LIST_FILE = os.getenv("SPLUNK_APP_LIST", "apps.txt")
