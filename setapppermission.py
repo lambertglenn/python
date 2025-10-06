@@ -15,7 +15,7 @@ payload = {
     "sharing": "app",  # or "app", "user"
     "owner": "admin",
     "perms.read": ["*"],
-    "perms.write": ["admin"]
+    "perms.write": "power,admin",
 }
 
 def update_app_acl(app_name, payload, session):
