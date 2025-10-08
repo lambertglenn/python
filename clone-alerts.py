@@ -67,7 +67,7 @@ def set_alert_acl(alert_name, dest_app, role, owner):
     payload = {
         "sharing": "app",
         "owner": owner,
-        "perms.read": f"user,admin,{role}",
+        "perms.read": f"*",
         "perms.write": f"admin,{role}"
     }
     headers = {
