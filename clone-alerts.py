@@ -9,6 +9,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Clone Splunk alerts from source apps into a target app.")
 parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 parser.add_argument("--logfile", type=str, default="clone_alerts.log", help="Path to log file")
+parser.add_argument("--role", type=str, help="Splunk role to grant write access to cloned alerts")
 args = parser.parse_args()
 
 VERBOSE = args.verbose
@@ -46,6 +47,30 @@ HEADERS = {
 }
 
 # --- FUNCTIONS ---
+def set_alert_acl(alert_name, dest_app, role, owner):
+    if not owner:
+        logging.warning(f"⚠️ No owner found for alert '{alert_name}', skipping ACL update")
+        return
+    
+    """Set ACL permissions for a cloned alert."""
+    encoded_name = quote(alert_name, safe='')
+    url = f"{SPLUNK_HOST}/servicesNS/nobody/{dest_app}/saved/searches/{encoded_name}/acl"
+    payload = {
+        "sharing": "app",
+        "owner": owner,
+        "perms.read": f"user,admin,{role}",
+        "perms.write": f"admin,{role}"
+    }
+    headers = {
+        "Authorization": f"Bearer {SPLUNK_TOKEN}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    response = requests.post(url, headers=headers, data=payload, verify=VERIFY_SSL)
+    if response.status_code == 200:
+        logging.info(f"🔐 ACL updated for '{alert_name}' with role '{role}'")
+    else:
+        logging.warning(f"⚠️ Failed to update ACL for '{alert_name}': {response.text}")
+
 def list_existing_alerts(app):
     """Return a set of alert names already present in the destination app."""
     url = f"{SPLUNK_HOST}/servicesNS/nobody/{app}/saved/searches?output_mode=json"
@@ -118,7 +143,11 @@ def main():
                 continue
             config = get_alert_details(app, alert_name)
             logging.debug(f"Fetched config for '{alert_name}': {json.dumps(config, indent=2)}")
+            #original_owner = config.get("eai:acl", {}).get("owner")
+            original_owner = "admin"  # Placeholder; adjust as needed
             clone_alert(alert_name, config, DEST_APP, verbose=args.verbose)
+            if args.role:
+                set_alert_acl(alert_name, DEST_APP, args.role, original_owner)
         except Exception as e:
             logging.error(f"❌ Error cloning '{alert_name}' from '{app}': {e}")
 
