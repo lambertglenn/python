@@ -48,6 +48,43 @@ HEADERS = {
 }
 
 # --- FUNCTIONS ---
+def get_existing_alerts_with_sharing(app):
+    """Return a dict of alert names → sharing level in the destination app."""
+    url = f"{SPLUNK_HOST}/servicesNS/nobody/{app}/saved/searches?output_mode=json"
+    response = requests.get(url, headers=HEADERS, verify=VERIFY_SSL)
+    response.raise_for_status()
+    alerts = {}
+    for entry in response.json()["entry"]:
+        name = entry["name"]
+        sharing = entry["acl"]["sharing"]
+        alerts[name] = sharing
+    return alerts
+
+def get_alert_sharing(app, alert_name):
+    encoded_name = quote(alert_name, safe='')
+    url = f"{SPLUNK_HOST}/servicesNS/nobody/{app}/saved/searches/{encoded_name}/acl?output_mode=json"
+    response = requests.get(url, headers=HEADERS, verify=VERIFY_SSL)
+    response.raise_for_status()
+    return response.json()["entry"][0]["acl"]["sharing"]
+
+def set_alert_sharing(app, alert_name, sharing="app"):
+    """Change the sharing level of an alert (e.g., from global to app)."""
+    encoded_name = quote(alert_name, safe='')
+    url = f"{SPLUNK_HOST}/servicesNS/nobody/{app}/saved/searches/{encoded_name}/acl"
+    payload = {
+        "sharing": sharing,
+        "owner": "admin"  # Optionally set owner to admin when changing sharing
+    }
+    headers = {
+        "Authorization": f"Bearer {SPLUNK_TOKEN}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    response = requests.post(url, headers=headers, data=payload, verify=VERIFY_SSL)
+    if response.status_code == 200:
+        logging.info(f"🔄 Changed sharing of '{alert_name}' to '{sharing}' in app '{app}'")
+    else:
+        logging.warning(f"⚠️ Failed to change sharing for '{alert_name}': {response.text}")
+    
 def disable_alert(app, alert_name):
     """Disable the original alert in its source app."""
     encoded_name = quote(alert_name, safe='')
@@ -159,15 +196,21 @@ def clone_alert(alert_name, alert_config, dest_app, verbose=False):
         
 # --- MAIN EXECUTION ---
 def main():
-    existing_alerts = list_existing_alerts(DEST_APP)
+    existing_alerts = get_existing_alerts_with_sharing(DEST_APP)
     for app, alert_name in read_alerts_from_file(INPUT_FILE):
+        sharing = existing_alerts.get(alert_name)
+        if sharing == "app":
+            logging.info(f"⏭️ Skipping '{alert_name}' — already exists in '{DEST_APP}' with app sharing")
+            continue
+        elif sharing == "global":
+            logging.info(f"🔄 Changing sharing of global alert '{alert_name}' to app before cloning")
+            set_alert_sharing(app, alert_name, sharing="app")        
         logging.info(f"📋 Processing alert '{alert_name}' from app '{app}'")
         try:
-            if alert_name in existing_alerts:
-                logging.info(f"⏭️ Skipping '{alert_name}' — already exists in '{DEST_APP}'")
-                continue
             config = get_alert_details(app, alert_name)
             logging.debug(f"Fetched config for '{alert_name}': {json.dumps(config, indent=2)}")
+            if get_alert_sharing(app, alert_name) == "global":
+                set_alert_sharing(app, alert_name, sharing="app")
             clone_alert(alert_name, config, DEST_APP, verbose=args.verbose)
             if args.disable_original:
                 disable_alert(app, alert_name)
