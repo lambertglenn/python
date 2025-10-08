@@ -47,6 +47,15 @@ HEADERS = {
 }
 
 # --- FUNCTIONS ---
+def get_alert_acl(app, alert_name):
+    """Fetch ACL metadata for a saved search."""
+    encoded_name = quote(alert_name, safe='')
+    url = f"{SPLUNK_HOST}/servicesNS/nobody/{app}/saved/searches/{encoded_name}/acl?output_mode=json"
+    response = requests.get(url, headers=HEADERS, verify=VERIFY_SSL)
+    response.raise_for_status()
+    entry = response.json()["entry"][0]
+    return entry["acl"]["owner"]
+
 def set_alert_acl(alert_name, dest_app, role, owner):
     if not owner:
         logging.warning(f"⚠️ No owner found for alert '{alert_name}', skipping ACL update")
@@ -143,11 +152,11 @@ def main():
                 continue
             config = get_alert_details(app, alert_name)
             logging.debug(f"Fetched config for '{alert_name}': {json.dumps(config, indent=2)}")
-            #original_owner = config.get("eai:acl", {}).get("owner")
-            original_owner = "admin"  # Placeholder; adjust as needed
             clone_alert(alert_name, config, DEST_APP, verbose=args.verbose)
             if args.role:
-                set_alert_acl(alert_name, DEST_APP, args.role, original_owner)
+                config = get_alert_details(app, alert_name)
+                owner = get_alert_acl(app, alert_name)                
+                set_alert_acl(alert_name, DEST_APP, role=args.role, owner=owner)
         except Exception as e:
             logging.error(f"❌ Error cloning '{alert_name}' from '{app}': {e}")
 
