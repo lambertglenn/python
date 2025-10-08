@@ -10,6 +10,7 @@ parser = argparse.ArgumentParser(description="Clone Splunk alerts from source ap
 parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 parser.add_argument("--logfile", type=str, default="clone_alerts.log", help="Path to log file")
 parser.add_argument("--role", type=str, help="Splunk role to grant write access to cloned alerts")
+parser.add_argument("--disable-original", action="store_true", help="Disable original alerts after cloning")
 args = parser.parse_args()
 
 VERBOSE = args.verbose
@@ -47,6 +48,21 @@ HEADERS = {
 }
 
 # --- FUNCTIONS ---
+def disable_alert(app, alert_name):
+    """Disable the original alert in its source app."""
+    encoded_name = quote(alert_name, safe='')
+    url = f"{SPLUNK_HOST}/servicesNS/nobody/{app}/saved/searches/{encoded_name}"
+    payload = {"disabled": "1"}
+    headers = {
+        "Authorization": f"Bearer {SPLUNK_TOKEN}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    response = requests.post(url, headers=headers, data=payload, verify=VERIFY_SSL)
+    if response.status_code == 200:
+        logging.info(f"🚫 Disabled original alert '{alert_name}' in app '{app}'")
+    else:
+        logging.warning(f"⚠️ Failed to disable alert '{alert_name}': {response.text}")
+
 def get_alert_acl(app, alert_name):
     """Fetch ACL metadata for a saved search."""
     encoded_name = quote(alert_name, safe='')
@@ -153,6 +169,8 @@ def main():
             config = get_alert_details(app, alert_name)
             logging.debug(f"Fetched config for '{alert_name}': {json.dumps(config, indent=2)}")
             clone_alert(alert_name, config, DEST_APP, verbose=args.verbose)
+            if args.disable_original:
+                disable_alert(app, alert_name)
             if args.role:
                 config = get_alert_details(app, alert_name)
                 owner = get_alert_acl(app, alert_name)                
