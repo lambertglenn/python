@@ -1,3 +1,0 @@
-Microservice
-PRDPYR_search
-qasearch
